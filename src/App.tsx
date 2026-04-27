@@ -143,7 +143,7 @@ function App() {
     formData.append("file", file);
 
     try {
-      const res = await axios.post("http://localhost:3000/upload", formData, {
+      const res = await axios.post(`${import.meta.env.VITE_API_URL}/upload`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       if (!res.data.success) {
