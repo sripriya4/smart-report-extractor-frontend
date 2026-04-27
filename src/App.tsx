@@ -14,14 +14,17 @@ interface ExtractionResult {
 
 const TYPE_LABELS: Record<string, string> = {
   invoice: "Invoice",
-  bank_statement: "Bank Statement",
   generic_document: "Generic Document",
 };
 
 const TYPE_COLORS: Record<string, string> = {
-  invoice: "#2563eb",
-  bank_statement: "#16a34a",
+  invoice: "#4f46e5",
   generic_document: "#7c3aed",
+};
+
+const TYPE_ICONS: Record<string, string> = {
+  invoice: "🧾",
+  generic_document: "📄",
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -30,38 +33,64 @@ const FIELD_LABELS: Record<string, string> = {
   date: "Invoice Date",
   orderNumber: "Order Number",
   seller: "Seller",
-  accountNumber: "Account Number",
-  balance: "Balance",
-  bankName: "Bank Name",
 };
 
+function CloudIcon() {
+  return (
+    <svg
+      className="cloud-icon"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+    </svg>
+  );
+}
+
+function Spinner() {
+  return <span className="spinner" aria-hidden="true" />;
+}
+
 function ResultCard({ result }: { result: ExtractionResult }) {
+  const [showFullText, setShowFullText] = useState(false);
   const color = TYPE_COLORS[result.type] || "#6b7280";
   const label = TYPE_LABELS[result.type] || result.type;
+  const icon = TYPE_ICONS[result.type] || "📄";
 
   const fields = result.data
     ? Object.entries(result.data).filter(([k, v]) => k !== "type" && v !== null)
     : [];
 
   return (
-    <div className="result-card">
+    <div
+      className="result-card"
+      style={{ "--accent-color": color } as React.CSSProperties}
+    >
       <div className="result-header">
-        <span className="type-badge" style={{ background: color }}>
-          {label}
-        </span>
-        <span className="result-title">Extraction Result</span>
+        <div className="result-header-left">
+          <span className="type-badge" style={{ background: color }}>
+            <span>{icon}</span>
+            {label}
+          </span>
+          <span className="result-title">Extraction Complete</span>
+        </div>
+        <span className="success-chip">✓ Success</span>
       </div>
 
       {result.summary && (
         <div className="summary-box">
-          <p className="summary-label">Summary</p>
+          <p className="section-label">AI Summary</p>
           <p className="summary-text">{result.summary}</p>
         </div>
       )}
 
       {fields.length > 0 && (
         <div className="fields-section">
-          <p className="fields-label">Extracted Fields</p>
+          <p className="section-label">Extracted Fields</p>
           <div className="fields-grid">
             {fields.map(([key, value]) => (
               <div className="field-row" key={key}>
@@ -75,8 +104,19 @@ function ResultCard({ result }: { result: ExtractionResult }) {
 
       {result.type === "generic_document" && result.fullText && (
         <div className="fields-section">
-          <p className="fields-label">Document Text</p>
-          <p className="raw-text">{result.fullText.substring(0, 600)}…</p>
+          <p className="section-label">Document Preview</p>
+          <p className="raw-text">
+            {showFullText ? result.fullText : result.fullText.substring(0, 600)}
+            {!showFullText && result.fullText.length > 600 && "…"}
+          </p>
+          {result.fullText.length > 600 && (
+            <button
+              className="view-more-btn"
+              onClick={() => setShowFullText((v) => !v)}
+            >
+              {showFullText ? "Show less ↑" : "View full text ↓"}
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -91,7 +131,7 @@ function App() {
 
   const handleUpload = async () => {
     if (!file) {
-      setError("Please select a file");
+      setError("Please select a PDF file first");
       return;
     }
 
@@ -106,41 +146,99 @@ function App() {
       const res = await axios.post("http://localhost:3000/upload", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      setResult(res.data);
+      if (!res.data.success) {
+        setError(res.data.message || "Could not process this file.");
+      } else {
+        setResult(res.data);
+      }
     } catch (err: any) {
-      setError(err.response?.data?.message || "Upload failed");
+      setError(
+        err.response?.data?.message || "Upload failed. Please try again.",
+      );
     } finally {
       setLoading(false);
     }
   };
 
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   return (
     <div className="page">
-      <div className="card">
-        <h2 className="title">📄 Smart Report Extractor</h2>
-        <p className="subtitle">Upload a PDF to extract structured data and get an AI summary</p>
-
-        <div className="upload-row">
-          <label className="file-label">
-            <input
-              type="file"
-              accept="application/pdf"
-              className="file-input"
-              onChange={(e) => {
-                setFile(e.target.files?.[0] || null);
-                setResult(null);
-                setError("");
-              }}
-            />
-            {file ? file.name : "Choose PDF"}
-          </label>
-
-          <button onClick={handleUpload} disabled={loading} className="upload-btn">
-            {loading ? "Processing…" : "Upload PDF"}
-          </button>
+      <header className="app-header">
+        <div className="header-icon-wrap">
+          <span className="header-icon">📄</span>
         </div>
+        <h1 className="app-title">Smart Report Extractor</h1>
+        <p className="app-tagline">
+          Upload a PDF and get AI-powered structured data extraction in seconds
+        </p>
+      </header>
 
-        {error && <p className="error-msg">{error}</p>}
+      <div className="card">
+        <label className="upload-zone" data-active={!!file}>
+          <input
+            type="file"
+            accept="application/pdf"
+            className="file-input"
+            onChange={(e) => {
+              const selected = e.target.files?.[0] || null;
+              if (selected && selected.size > 50 * 1024 * 1024) {
+                setError(
+                  "File exceeds the 50 MB limit. Please compress or use a smaller PDF.",
+                );
+                setFile(null);
+                e.target.value = "";
+                return;
+              }
+              setFile(selected);
+              setResult(null);
+              setError("");
+            }}
+          />
+          <CloudIcon />
+          {file ? (
+            <div className="upload-zone-content">
+              <span className="upload-filename">{file.name}</span>
+              <span className="upload-meta">
+                {formatFileSize(file.size)} · Click to change
+              </span>
+            </div>
+          ) : (
+            <div className="upload-zone-content">
+              <span className="upload-cta">Click to choose a PDF</span>
+              <span className="upload-hint">PDF only, max 50 MB</span>
+            </div>
+          )}
+        </label>
+
+        <button
+          onClick={handleUpload}
+          disabled={loading}
+          className="upload-btn"
+        >
+          {loading ? (
+            <>
+              <Spinner />
+              Analyzing document…
+            </>
+          ) : (
+            <>
+              Extract Data
+              <span className="btn-arrow">→</span>
+            </>
+          )}
+        </button>
+
+        {error && (
+          <div className="error-msg">
+            <span className="error-icon">⚠</span>
+            {error}
+          </div>
+        )}
       </div>
 
       {result && <ResultCard result={result} />}
